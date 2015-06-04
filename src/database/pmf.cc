@@ -90,7 +90,7 @@ UInt pmf::binarySearch(const UInt low, const UInt high, const double _distance) 
 	{	return low;
 	}
 	else
-	{	UInt mid = low + (high - low)/2;
+    {	UInt mid = low + (high - low) * 0.5;
 		if (_distance > distanceBinUpperLimits[mid])
 		{	return binarySearch(mid+1, high, _distance);
 		}

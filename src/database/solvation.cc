@@ -103,7 +103,7 @@ double solvation::getSolvationEnergy(double _surfaceArea, UInt _atomType, UInt _
 	{
 		if (_paramSet >=0 && _paramSet < itsParams[_atomType].size())
 		{
-			return itsScaleFactor*_surfaceArea*itsParams[_atomType][_paramSet] / 1000;
+            return itsScaleFactor*_surfaceArea*itsParams[_atomType][_paramSet] * 0.001;
 		}
 	}
 	else

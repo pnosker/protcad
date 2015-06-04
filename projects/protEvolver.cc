@@ -1,0 +1,409 @@
+//*******************************************************************************************************
+//*******************************************************************************************************
+//***********************************                          ******************************************
+//***********************************     protEvolver 2.0      ******************************************
+//***********************************                          ******************************************
+//*******************************************************************************************************
+//***************   -Folding Selective Protein Evolution in Implicit Solvent-   ***********************
+//*******************************************************************************************************
+
+/////// Just specify infile structure, active chains and residues indexes, and it will evolve a sequence favorable for folding
+
+//--Included files and functions-------------------------------------------------------------------------
+#include <iostream>
+#include <string>
+#include <time.h>
+#include <sstream>
+#include "ensemble.h"
+#include "PDBInterface.h"
+
+void randomizeSideChains(protein* _prot, UInt _chainIndex);
+vector < UInt > getChainSequence(protein* _prot, UInt _chainIndex);
+
+//--Program setup----------------------------------------------------------------------------------------
+int main (int argc, char* argv[])
+{
+	//--Running parameters
+	if (argc !=2)
+	{
+		cout << "protEvolver <inFile.pdb>" << endl;
+		exit(1);
+	}
+	string infile = argv[1];
+	enum aminoAcid {A,R,N,D,Dh,C,Cx,Q,E,Eh,Hd,He,Hn,Hp,I,L,K,M,F,P,O,S,T,W,Y,V,G,dA,dR,dN,dD,dDh,dC,dCx,dQ,dE,dEh,dHd,dHe,dHn,dHp,dI,dL,dK,dM,dF,dP,dO,dS,dT,dAT,dW,dY,dV};
+	string aminoAcidString[] = {"A","R","N","D","Dh","C","Cx","Q","E","Eh","Hd", "He","Hn","Hp","I","L","K","M","F","P","O","S","T","W","Y", "V","G","dA","dR","dN","dD","dDh","dC","dCx","dQ","dE","dEh","dHd","dHe","dHn","dHp","dI","dL","dK","dM","dF","dP","dO","dS","dT","dAT","dW","dY","dV"};
+	PDBInterface* thePDB = new PDBInterface(infile);
+	ensemble* theEnsemble = thePDB->getEnsemblePointer();
+	molecule* pMol = theEnsemble->getMoleculePointer(0);
+	protein* bundle = static_cast<protein*>(pMol);
+	bundle->silenceMessages();
+	residue::setCutoffDistance(9.0);
+	pmf::setScaleFactor(0.0);
+	rotamer::setScaleFactor(0.0);
+	microEnvironment::setScaleFactor(0.0);
+	amberVDW::setScaleFactor(0.7);
+	amberVDW::setRadiusScaleFactor(1.0);
+	amberVDW::setLinearRepulsionDampeningOff();
+	amberElec::setScaleFactor(1.0);
+	solvation::setItsScaleFactor(0.0);
+	srand (time(NULL));
+
+	//--inputs for mutation
+	UInt activeChains[] = {0,1,2,3};
+	//UInt allowedLResidues[] = {A,R,N,D,Q,E,He,I,L,K,M,F,P,S,T,W,Y,V,G};
+	//UInt activeResidues[] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19};
+	//UInt allowedLResidues[] = {A,N,D,Q,E,He,L,K,M,F,S,W,Y};
+	//UInt activeResidues[] = {1,4,5,6};
+	UInt allowedLResidues[] = {A,F,I,L,M,T,V,W,Y};
+	UInt activeResidues[] = {2,6,9,12,13,19,20,23,26,27,30};
+	//UInt allowedLResidues[] = {E,R,K,D,P,P};
+	//UInt activeResidues[] = {0,1,3,4,6,7,9,10,12,13,15,16,18,19,21,22,24,25,27,28};
+	UInt allowedDResidues[] = {G};
+
+	double phi, bestEnergy, foldingEnergy, finalEnergy, posE, totalposE, aveposE, originalEnergy, sessEnergy, tempEnergy, startAvePosE, sysEnergy, bindingEnergy, sessBindEnergy, tempBindEnergy, originalBindEnergy, bestBindingEnergy;
+	UInt nobetter = 0, activeResiduesSize = sizeof(activeResidues)/sizeof(activeResidues[0]), activeChainsSize = sizeof(activeChains)/sizeof(activeChains[0]);
+	UInt dResidues = sizeof(allowedDResidues)/sizeof(allowedDResidues[0]), lResidues = sizeof(allowedLResidues)/sizeof(allowedLResidues[0]);
+	UInt name, mutant, numResidues, plateau = (lResidues*activeResiduesSize*activeChainsSize*2), fib = 0, oldBuffer, newBuffer, bufferBump;
+	vector < UInt > mutantPosition, chainSequence, sequencePosition;
+	vector < vector < UInt > > proteinSequence, finalSequence;
+	vector < double > Energy(2);
+	UInt randres, randchain, rescount = 0;
+	stringstream convert;
+	string startstr, outFile;
+	name = rand() % 1000000;
+	convert << name, startstr = convert.str();
+	string tempModel = startstr + "_temp.pdb";
+	delete thePDB;
+
+	//--Run multiple independent evolution cycles-----------------------------------------------------
+	for (UInt a = 1; a < 200; a++)
+	{
+		PDBInterface* thePDB = new PDBInterface(infile);
+		ensemble* theEnsemble = thePDB->getEnsemblePointer();
+		molecule* pMol = theEnsemble->getMoleculePointer(0);
+		protein* bundle = static_cast<protein*>(pMol);
+
+
+		//--load in initial pdb and mutate in random starting sequence on active chains and residues
+		proteinSequence.clear(), chainSequence.clear(), Energy.clear(), fib = 0, nobetter = 0, sysEnergy = 0, bindingEnergy = 0;
+		for (UInt i = 0; i < activeChainsSize; i++)
+		{
+			for (UInt j = 0; j < activeResiduesSize; j++)
+			{
+				bundle->activateForRepacking(activeChains[i], activeResidues[j]);
+			//	phi = bundle->getPhi(activeChains[i], activeResidues[j]);
+			//	if (phi > 0 && phi < 180)
+			//	{
+			//		mutant = allowedDResidues[(rand() % dResidues)];
+			//		bundle->mutateWBC(activeChains[i], activeResidues[j], mutant);
+			//	}
+			//	if (phi < 0 && phi > -180)
+			//	{
+			//		mutant = allowedLResidues[(rand() % lResidues)];
+			//		bundle->mutateWBC(activeChains[i], activeResidues[j], mutant);
+			//	}
+			}
+		//	randomizeSideChains(bundle, activeChains[i]);
+			chainSequence = getChainSequence(bundle, activeChains[i]);
+			proteinSequence.push_back(chainSequence);
+		}
+//		bundle->rotOptSolvent(100);
+
+		//--Determine next mutation position
+		rescount = 0, totalposE = 0, mutantPosition.clear();
+//		for (UInt i = 0; i < activeChainsSize; i++)
+//		{
+//			for (UInt j = 0; j < activeResiduesSize; j++)
+//			{
+//				rescount++;
+//				posE = bundle->getPositionSoluteEnergy(activeChains[i], activeResidues[j], true);
+//				totalposE = totalposE + posE;
+//			}
+//		}
+//		aveposE = totalposE/rescount;
+
+
+//		posE = -1E10;
+//		do
+//		{
+			randres = activeResidues[rand() % activeResiduesSize];
+
+//cout << "Residue Number = " << randres << endl;
+
+			if (activeChainsSize > 1)
+			{
+				randchain = activeChains[rand() % activeChainsSize];
+			}
+			else
+			{
+				randchain = activeChains[0];
+			}
+
+
+
+//cout << "Chain Number = " << randchain << endl;
+
+//			posE = bundle->getPositionSoluteEnergy(randchain, randres, true);
+//		}while (posE <= aveposE);
+		mutantPosition.push_back(randchain);
+		mutantPosition.push_back(randres);
+		pdbWriter(bundle, tempModel);
+
+//cout << "Chain " << randchain << " Average Position Energy = " << aveposE << endl;
+		
+		startAvePosE = aveposE;
+
+cout << "Temp PDB written" << endl;
+
+//		//--set Energy startpoint
+		Energy.clear();
+		Energy = bundle->chainBindingEnergy();
+//		foldingEnergy = Energy[1];
+//		bestEnergy = Energy[0];
+//		originalEnergy = bestEnergy; 
+//		fib = 1 + 0.05 * originalEnergy;
+
+
+		sysEnergy = 0;
+		bindingEnergy = 0;
+		sysEnergy = bundle->intraSoluteEnergy(true);
+		bindingEnergy = Energy[1];
+		bestEnergy = sysEnergy;
+		bestBindingEnergy = bindingEnergy;
+		originalEnergy = bestEnergy;
+		originalBindEnergy = bestBindingEnergy;
+		fib = 0.000000001;
+
+cout << "Best Energy Set" << endl;
+cout << " " << endl;
+
+
+		delete thePDB;
+		
+		//--Run single evolution loop till hitting plateau
+		do
+		{  
+			PDBInterface* thePDB = new PDBInterface(infile);
+			ensemble* theEnsemble = thePDB->getEnsemblePointer();
+			molecule* pMol = theEnsemble->getMoleculePointer(0);
+			protein* bundle = static_cast<protein*>(pMol);
+
+			//--Mutate current sequence, new mutant and optimize system
+//			fib++, nobetter++;
+
+			oldBuffer = fib;
+			fib = 0.00000001, nobetter++;
+			newBuffer = fib;
+			for (UInt i = 0; i < activeChainsSize; i++)
+			{
+				numResidues = bundle->getNumResidues(activeChains[i]);
+				for (UInt j = 0; j < numResidues; j++)
+				{
+					bundle->activateForRepacking(activeChains[i],j);
+					if (activeChains[i] == mutantPosition[0] && j == mutantPosition[1])
+					{
+						//--new mutant
+
+						sequencePosition.push_back(i);
+						sequencePosition.push_back(j);
+						phi = bundle->getPhi(mutantPosition[0], mutantPosition[1]);
+						if (phi > 0 && phi < 180)
+						{
+							mutant = allowedDResidues[(rand() % dResidues)];
+							bundle->mutateWBC(mutantPosition[0],mutantPosition[1], mutant);
+						}
+						if (phi < 0 && phi > -180)
+						{
+							mutant = allowedLResidues[(rand() % lResidues)];
+							bundle->mutateWBC(mutantPosition[0],mutantPosition[1], mutant);
+						}
+					}
+					else
+					{
+//cout << "Active Chain = " << activeChains[i] << endl;
+//cout << "Active Residue = " << j << endl;
+//cout << "Selected Residue Index =" << proteinSequence[i][j] << endl;
+
+
+						bundle->mutateWBC(activeChains[i],j, proteinSequence[i][j]);
+					}
+				}
+//				randomizeSideChains(bundle, activeChains[i]);
+			}
+			bundle->rotOptSolvent(500);
+			protein* tempBundle = new protein(*bundle);
+			
+			//--Determine next mutation position
+			rescount = 0, totalposE = 0, mutantPosition.clear();
+//			for (UInt i = 0; i < activeChainsSize; i++)
+//			{
+//				for (UInt j = 0; j < activeResiduesSize; j++)
+//				{
+//					rescount++;
+//					posE = bundle->getPositionSoluteEnergy(activeChains[i], activeResidues[j], true);
+//					totalposE = totalposE + posE;
+//				}
+//			}
+//			aveposE = totalposE/rescount;
+//			posE = -1E10;
+//			do
+//			{
+				randres = activeResidues[rand() % activeResiduesSize];
+
+//cout << "Residue Number = " << randres << endl;
+
+				if (activeChainsSize > 1)
+				{
+					randchain = activeChains[rand() % activeChainsSize];
+				}
+				else
+				{
+					randchain = activeChains[0];
+				}
+
+//cout << "Chain Number = " << randchain << endl;
+
+
+//				posE = bundle->getPositionSoluteEnergy(randchain, randres, true);
+//			}while (posE <= aveposE);
+			mutantPosition.push_back(randchain);
+			mutantPosition.push_back(randres);
+
+				bundle->rotOptSolvent(500);
+
+			//--Energy test and determination of next mutant position
+			Energy.clear();
+			Energy = bundle->chainBindingEnergy();
+
+			bindingEnergy = 0;
+			bindingEnergy = Energy[1];
+			
+			sysEnergy = 0;
+			sysEnergy = bundle->intraSoluteEnergy(true);
+
+//			sessEnergy = Energy[0];
+//			tempEnergy = Energy[1];
+
+			sessEnergy = sysEnergy;
+			sessBindEnergy = bindingEnergy;
+
+
+//cout << "Temp Energy = " << tempEnergy << endl;
+cout << " " << endl;
+//cout << "Starting Energy = " << originalEnergy << " | Best Energy = " << bestEnergy << " | Session Energy = " << sessEnergy << " | Buffer = " << newBuffer << " | " << "Buffer Bump = " << newBuffer - oldBuffer << " | " << "Focus Residue: Chain " << randchain << ", Residue " << randres << flush;
+
+cout << "Starting Bind Energy = " << originalBindEnergy << " | Best Bind Energy = " << bestBindingEnergy << " | Session Binding Energy = " << sessBindEnergy << " | Buffer = " << newBuffer << " | " << "Buffer Bump = " << newBuffer - oldBuffer << flush;
+
+
+//cout << "Starting Energy = " << originalEnergy << endl;
+//cout << "Best Energy = " << bestEnergy << endl;
+//cout << "Session Energy = " << sessEnergy << endl;
+//cout << "Temp Energy = " << tempEnergy << endl;
+//cout << "Buffer = " << newBuffer << endl;
+//cout << "Buffer Bump = " << newBuffer - oldBuffer << endl;
+//cout << "Focus Residue: Chain " << randchain << ", Residue " << randres << endl;
+//cout << " " << endl;
+
+
+			if (sessBindEnergy < (bestBindingEnergy + newBuffer))
+//			if (((sessEnergy > originalEnergy) && (sessEnergy < (originalEnergy + newBuffer))) || (sessEnergy < bestEnergy))
+//			if (((tempEnergy > sessEnergy) && (tempEnergy < (originalEnergy + newBuffer))) || (sessEnergy < originalEnergy))
+//			if (((sessEnergy > originalEnergy) && (tempEnergy < (originalEnergy + newBuffer))) || (sessEnergy < originalEnergy))
+			{
+
+cout << " New Binding Energy = " << sessBindEnergy << endl;
+//cout << " New Energy = " << sessEnergy << endl;
+//cout << "New Energy = " << Energy[0] << endl;
+//cout << "Original Average Position Energy: " << startAvePosE << endl;
+//cout << "New Average Position Energy:      " << aveposE << endl;
+//cout << "New Position Energy:              " << posE << endl;
+//				if (Energy[1] < bestEnergy)
+				if (sessBindEnergy < bestBindingEnergy)
+//				if (sessEnergy < bestEnergy)
+				{
+//					bestEnergy = Energy[1];
+//					bestEnergy = sessEnergy;
+					bestBindingEnergy = sessBindEnergy;
+					pdbWriter(tempBundle, tempModel);
+				}
+				fib = 0, nobetter--, proteinSequence[sequencePosition[0]][sequencePosition[1]] = mutant, foldingEnergy = Energy[1];
+			}
+			sequencePosition.clear();
+			delete thePDB;
+			delete tempBundle;
+		}while (nobetter < plateau);
+
+		//--Print final energy and write a pdb file----------------------------------------------------
+		PDBInterface* theModelPDB = new PDBInterface(tempModel);
+		ensemble* theModelEnsemble = theModelPDB->getEnsemblePointer();
+		molecule* modelMol = theModelEnsemble->getMoleculePointer(0);
+		protein* model = static_cast<protein*>(modelMol);
+		name = rand() % 1000000;
+		stringstream convert;
+		string countstr;
+		convert << name, countstr = convert.str();
+		outFile = countstr + ".evo.pdb";
+		pdbWriter(model, outFile);
+		finalSequence.clear(), chainSequence.clear(), Energy.clear(), sysEnergy = 0;
+		for (UInt i = 0; i < activeChainsSize; i++)
+		{
+			chainSequence = getChainSequence(model, activeChains[i]);
+			finalSequence.push_back(chainSequence);
+		}
+		Energy = model->chainBindingEnergy();
+		bindingEnergy = Energy[1];		
+//		sysEnergy = bundle->intraSoluteEnergy(true);
+//		finalEnergy = Energy[0], foldingEnergy = Energy[1];
+//		finalEnergy = sysEnergy;
+		finalEnergy = bindingEnergy;
+//		cout << name << " " << finalEnergy << " " << foldingEnergy << " ";
+		cout << name << " | Total Energy: " << finalEnergy << " | Binding Energy: " << bestBindingEnergy << endl;
+		for (UInt i = 0; i < activeChainsSize; i++)
+		{
+			for (UInt j = 0; j < finalSequence[i].size(); j++)
+			{
+				cout << aminoAcidString[finalSequence[i][j]] << " ";
+			}
+		}
+		cout << endl;
+		delete theModelPDB;
+	}
+	return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////// functions //////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void randomizeSideChains(protein* _prot, UInt _chainIndex)
+{	
+	UInt allowedRotsSize, randrot, restype, numResidues;
+	UIntVec allowedRots;
+	numResidues = _prot->getNumResidues(_chainIndex);
+	for (UInt j = 0; j < numResidues; j++)
+	{
+		restype = _prot->getTypeFromResNum(_chainIndex, j);
+		allowedRots = _prot->getAllowedRotamers(_chainIndex, j, restype, 0);
+		allowedRotsSize = allowedRots.size();
+		if (allowedRotsSize > 2)
+		{
+			randrot = rand() % allowedRotsSize;
+			_prot->setRotamerWBC(_chainIndex, j, 0, allowedRots[randrot]);
+		}
+	}
+	return;
+}
+
+vector < UInt > getChainSequence(protein* _prot, UInt _chainIndex)
+{	
+	UInt restype, numResidues;
+	vector < UInt > sequence;
+	numResidues = _prot->getNumResidues(_chainIndex);
+	for (UInt j = 0; j < numResidues; j++)
+	{
+		restype = _prot->getTypeFromResNum(_chainIndex, j);
+		sequence.push_back(restype);
+	}
+	return sequence;
+}

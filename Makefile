@@ -11,7 +11,7 @@ export MAKE = make
 
 SHELL = /bin/sh
 
-TARGETS = example
+TARGETS = example fourEvolver protOptSolvent sideChainRandomizer protMover bindingEnergy intraSoluteEnergy rotOptSolvent protEvolver bundler tripletDihedralSweep tripletBuilder tripletDihedralLandscape
 
 .SUFFIXES:
 .SUFFIXES: .cc .o .h .f .a
@@ -33,8 +33,9 @@ FLAG_OPT3 = -Wall -O3  -g -felide-constructors -Wno-deprecated
 FLAG_PROF = -Wall -O3 -felide-constructors -pg -Wno-deprecated
 FLAG_DEBUG = -Wall -g2 -felide-constructors -Wno-deprecated
 FLAG_DEBUG2 = -Wall -g2 -ansi -pedantic -Wno-deprecated
+FLAG_OPTMAX = -Wall -O2 -ftree-vectorize -march=native -mtune=native -pipe -msse3 -Wno-deprecated -fopenmp
 
-CFLAGS = $(FLAG_DEBUG2) $(DEFS)
+CFLAGS = $(FLAG_OPTMAX) $(DEFS)
 FFLAGS = -Wall -g 
 
 INC_BASE = -I$(SRCDIR)/ensemble -I$(SRCDIR)/io \
@@ -66,6 +67,54 @@ libprotcad.a : $(LIB_CC_OBJECTS) $(LIB_F77_OBJECTS)
 		cd $(OBJDIR) && ranlib libprotcad.a
 
 example : libprotcad.a example.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+protEvolver : libprotcad.a protEvolver.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+protOptSolvent : libprotcad.a protOptSolvent.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+rotOptSolvent : libprotcad.a rotOptSolvent.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+bundler : libprotcad.a bundler.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+sideChainRandomizer : libprotcad.a sideChainRandomizer.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+protMover : libprotcad.a protMover.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+bindingEnergy : libprotcad.a bindingEnergy.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+intraSoluteEnergy : libprotcad.a intraSoluteEnergy.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+fourEvolver : libprotcad.a fourEvolver.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+tripletDihedralSweep : libprotcad.a tripletDihedralSweep.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+tripletBuilder : libprotcad.a tripletBuilder.cc
+	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
+	cd $(OBJDIR) && mv $@ $(BINDIR)
+
+tripletDihedralLandscape : libprotcad.a tripletDihedralLandscape.cc
 	cd $(OBJDIR) && $(CXX) $(CFLAGS) $^ -o $@ $(INC_BASE) $(LIB_BASE)
 	cd $(OBJDIR) && mv $@ $(BINDIR)
 
